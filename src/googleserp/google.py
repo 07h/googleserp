@@ -173,8 +173,8 @@ class SearchClient:
         # Update proxy_dict if a proxy is provided.
         if proxy:
             self.proxy_dict = {
-                "http": self.proxy,
-                "https": self.proxy,
+                "http://": self.proxy,
+                "https://": self.proxy,
             }
 
     def update_urls(self) -> None:
