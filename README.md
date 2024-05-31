@@ -1,4 +1,14 @@
-# yagooglesearch - Yet another googlesearch
+# GoogleSERP - is the async fork of [`yagooglesearch` (Yet another googlesearch)](https://github.com/opsdisk/yagooglesearch)
+
+## Overview of the fork
+
+### Features
+
+- Asynchronous code on `httpx` (instead of `requests`)
+- deleted log file `yagooglesearch.py.log`
+- deleted user-agents file `user_agents.txt` (UA is specified at class creation)
+- deleted languages file `result_languages.txt` (specified when creating the class)
+- customizing logging in the class
 
 ## Overview
 
@@ -12,9 +22,9 @@ heavily based off the [googlesearch](https://github.com/MarioVilas/googlesearch)
 * HTTP 429 / rate-limit detection (Google is blocking your IP for making too many search requests) and recovery
 * Randomizing delay times between retrieving paged search results (i.e., clicking on page 2 for more results)
 * HTTP(S) and SOCKS5 proxy support
-* Leveraging `requests` library for HTTP requests and cookie management
+* Leveraging ~~`requests`~~ `httpx` library for async HTTP requests and cookie management
 * Adds "&filter=0" by default to search URLs to prevent any omission or filtering of search results by Google
-* Console and file logging
+* Console ~~and file logging~~
 * Python 3.6+
 
 ## Terms and Conditions
@@ -30,49 +40,35 @@ interesting information/discussion on it:
 
 Google's preferred method is to use their [API](https://developers.google.com/custom-search/v1/overview).
 
-## Installation
-
-## pip
-
-```bash
-pip install yagooglesearch
-```
-
-## pyproject.toml
-
-```bash
-git clone https://github.com/opsdisk/yagooglesearch
-cd yagooglesearch
-virtualenv -p python3 .venv  # If using a virtual environment.
-source .venv/bin/activate  # If using a virtual environment.
-pip install .  # Reads from pyproject.toml
-```
 
 ## Usage
 
 ```python
-import yagooglesearch
+import asyncio
+from googleserp import google
 
-query = "site:github.com"
+async def main():
+    query = "site:github.com"
 
-client = yagooglesearch.SearchClient(
-    query,
-    tbs="li:1",
-    max_search_result_urls_to_return=100,
-    http_429_cool_off_time_in_minutes=45,
-    http_429_cool_off_factor=1.5,
-    # proxy="socks5h://127.0.0.1:9050",
-    verbosity=5,
-    verbose_output=True,  # False (only URLs) or True (rank, title, description, and URL)
-)
-client.assign_random_user_agent()
+    client = google.SearchClient(
+        query,
+        tbs="li:1",
+        max_search_result_urls_to_return=100,
+        http_429_cool_off_time_in_minutes=45,
+        http_429_cool_off_factor=1.5,
+        # proxy="socks5h://127.0.0.1:9050",
+        verbosity=5,
+        verbose_output=True,  # False (only URLs) or True (rank, title, description, and URL)
+    )
 
-urls = client.search()
+    urls = await client.search()
 
-len(urls)
+    return urls
 
-for url in urls:
-    print(url)
+if __name__ == "__main__":
+    results = asyncio.run(main())
+    for result in results:
+        print(result)
 ```
 
 ## Max ~400 results returned
@@ -104,27 +100,26 @@ The goal is to have `yagooglesearch` worry about HTTP 429 detection and recovery
 using it.
 
 If you do not want `yagooglesearch` to handle HTTP 429s and would rather handle it yourself, pass
-`yagooglesearch_manages_http_429s=False` when instantiating the yagooglesearch object.  If an HTTP 429 is detected, the
+`manages_http_429s=False` when instantiating the yagooglesearch object.  If an HTTP 429 is detected, the
 string "HTTP_429_DETECTED" is added to a list object that will be returned, and it's up to you on what the next step
 should be.  The list object will contain any URLs found before the HTTP 429 was detected.
 
 ```python
-import yagooglesearch
+from googleserp import google
 
 query = "site:twitter.com"
 
-client = yagooglesearch.SearchClient(
+client = google.SearchClient(
     query,
     tbs="li:1",
     verbosity=4,
     num=10,
     max_search_result_urls_to_return=1000,
     minimum_delay_between_paged_results_in_seconds=1,
-    yagooglesearch_manages_http_429s=False,  # Add to manage HTTP 429s.
+    manages_http_429s=False,  # Add to manage HTTP 429s.
 )
-client.assign_random_user_agent()
 
-urls = client.search()
+urls = await client.search()
 
 if "HTTP_429_DETECTED" in urls:
     print("HTTP 429 detected...it's up to you to modify your search.")
@@ -177,11 +172,11 @@ either:
 1) Instantiating the `yagooglesearch.SearchClient` object:
 
 ```python
-import yagooglesearch
+import google
 
 query = "site:github.com"
 
-client = yagooglesearch.SearchClient(
+client = google.SearchClient(
     query,
     proxy="http://127.0.0.1:8080",
     verify_ssl=False,
@@ -194,7 +189,7 @@ client = yagooglesearch.SearchClient(
 ```python
 query = "site:github.com"
 
-client = yagooglesearch.SearchClient(
+client = google.SearchClient(
     query,
     proxy="http://127.0.0.1:8080",
     verbosity=5,
@@ -210,7 +205,7 @@ a new `yagooglesearch.SearchClient` object with the different proxy. Below is an
 proxies:
 
 ```python
-import yagooglesearch
+import google
 
 proxies = [
     "socks5h://127.0.0.1:9050",
@@ -233,7 +228,7 @@ for search_query in search_queries:
     # Rotate through the list of proxies using modulus to ensure the index is in the proxies list.
     proxy_index = proxy_rotation_index % len(proxies)
 
-    client = yagooglesearch.SearchClient(
+    client = google.SearchClient(
         search_query,
         proxy=proxies[proxy_index],
     )
@@ -242,7 +237,7 @@ for search_query in search_queries:
     if proxies[proxy_index].startswith("http://"):
         client.verify_ssl = False
 
-    urls_list = client.search()
+    urls_list = await client.search()
 
     print(urls_list)
 

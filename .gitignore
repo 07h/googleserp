@@ -1,6 +1,6 @@
 build/
 dist/
-/yagooglesearch.egg-info/
+/googleserp.egg-info/
 *.log
 __pycache__/
 .venv/
