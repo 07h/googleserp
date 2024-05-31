@@ -10,8 +10,6 @@ from bs4 import BeautifulSoup
 
 # Custom Python libraries.
 
-__version__ = "1.0"
-
 
 def get_tbs(from_date, to_date):
     """Helper function to format the tbs parameter dates. Note that verbatim mode also uses the &tbs= parameter, but
