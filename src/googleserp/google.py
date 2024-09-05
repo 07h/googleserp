@@ -250,8 +250,13 @@ class SearchClient:
                 link = None
 
             # TODO: Generates false positives if specifying an actual Google site, e.g. "site:google.com fiber".
-            if urlparse_object.netloc and ("google" in urlparse_object.netloc.lower()):
+            if urlparse_object.netloc and (urlparse_object.netloc.lower() in ["google", "search.app.goo.gl"]):
                 self.logger.debug(f'Excluding URL because it contains "google": {link}')
+                link = None
+
+            # sometimes the scheme is like googlechromeaction, intent or something else
+            if urlparse_object.scheme and urlparse_object.scheme not in ["http", "https"]:
+                self.logger.debug(f"Excluding URL because it does not contain a valid scheme: {link}")
                 link = None
 
         except Exception:
