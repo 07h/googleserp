@@ -250,7 +250,9 @@ class SearchClient:
                 link = None
 
             # TODO: Generates false positives if specifying an actual Google site, e.g. "site:google.com fiber".
-            if urlparse_object.netloc and (urlparse_object.netloc.lower() in ["google", "search.app.goo.gl"]):
+            if urlparse_object.netloc and (
+                ("google" in urlparse_object.netloc.lower() or ("search.app" in urlparse_object.netloc.lower()))
+            ):
                 self.logger.debug(f'Excluding URL because it contains "google": {link}')
                 link = None
 
