@@ -2,7 +2,7 @@ from src.googleserp import SearchClient
 
 
 async def test_search():
-    query = "site:iotjobs.fr"
+    query = "pizza delivery bali"
 
     client = SearchClient(
         query,

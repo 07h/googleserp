@@ -2,13 +2,12 @@
 authors = ["07h <noreply@microsoft.com>"]
 description = "GoogleSERP is a Python library for executing intelligent, realistic-looking, and tunable Google searches"
 name = "GoogleSERP"
-readme = {file = "README.md", content-type = "text/markdown"}
-version = {attr = "googleserp.__version__"}
+version = "0.1.0"
 
 [tool.poetry.dependencies]
-beautifulsoup4 = ">=4.9.3"
 httpx = {version = ">=0.24.1", extras = ["socks"]}
 python = ">=3.9.1,<3.12"
+selectolax = "^0.3.26"
 
 [tool.poetry.dev-dependencies]
 pytest = "^8.3.2"

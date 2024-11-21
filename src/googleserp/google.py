@@ -2,11 +2,11 @@
 import asyncio
 import logging
 import random
-import urllib
+import urllib.parse
 
 # Third party Python libraries.
 import httpx
-from bs4 import BeautifulSoup
+from selectolax.parser import HTMLParser  # Замена BeautifulSoup на selectolax
 
 # Custom Python libraries.
 
@@ -297,7 +297,11 @@ class SearchClient:
         self.logger.info(f"Requesting URL: {url}")
 
         async with httpx.AsyncClient(proxies=self.proxy_dict, cookies=self.cookies, verify=self.verify_ssl) as client:
-            response = await client.get(url, headers=headers, timeout=15)
+            try:
+                response = await client.get(url, headers=headers, timeout=15)
+            except httpx.RequestError as e:
+                self.logger.error(f"An error occurred while requesting {url}: {e}")
+                return ""
 
             # Update the cookies.
             self.cookies = response.cookies
@@ -315,32 +319,17 @@ class SearchClient:
             # Google throws up a consent page for searches sourcing from a European Union country IP location.
             # See https://github.com/benbusby/whoogle-search/issues/311
             try:
-                if response.cookies["CONSENT"].startswith("PENDING+"):
+                if "CONSENT" in response.cookies and response.cookies["CONSENT"].startswith("PENDING+"):
                     self.logger.warning(
                         "Looks like your IP address is sourcing from a European Union location...your search results may "
                         "vary, but I'll try and work around this by updating the cookie."
                     )
 
-                    # Convert the cookiejar data structure to a Python dict.
-                    cookie_dict = httpx.cookies.jar.CookiesJar(response.cookies)
-
                     # Pull out the random number assigned to the response cookie.
-                    number = cookie_dict["CONSENT"].split("+")[1]
+                    consent_value = response.cookies["CONSENT"]
+                    number = consent_value.split("+")[1] if "+" in consent_value else "0"
 
-                    # See https://github.com/benbusby/whoogle-search/pull/320/files
-                    """
-                    Attempting to dissect/breakdown the new cookie response values.
-
-                    YES - Accept consent
-                    shp - ?
-                    gws - "server:" header value returned from original request. Maybe Google Workspace plus a build?
-                    fr - Original tests sourced from France. Assuming this is the country code. Country code was changed
-                        to .de and it still worked.
-                    F - FX agrees to tracking. Modifying it to just F seems to consent with "no" to personalized stuff.
-                        Not tested, solely based off of
-                        https://github.com/benbusby/whoogle-search/issues/311#issuecomment-841065630
-                    XYZ - Random 3-digit number assigned to the first response cookie.
-                    """
+                    # Update the consent cookie
                     self.cookies = {"CONSENT": f"YES+shp.gws-20211108-0-RC1.fr+F+{number}"}
 
                     self.logger.info(f"Updating cookie to: {self.cookies}")
@@ -376,6 +365,11 @@ class SearchClient:
                 self.logger.warning(f"HTML response code: {http_response_code}")
 
         return html
+
+    async def parse_html(self, html_content):
+        """Асинхронная функция для парсинга HTML с использованием selectolax."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, HTMLParser, html_content)
 
     async def search(self):
         """Start the Google search.
@@ -437,19 +431,19 @@ class SearchClient:
                 self.search_result_list.append("HTTP_429_DETECTED")
                 return self.search_result_list
 
-            # Create the BeautifulSoup object.
-            soup = BeautifulSoup(html, "html.parser")
+            # Асинхронный парсинг HTML с использованием selectolax
+            tree = await self.parse_html(html)
 
-            # Find all HTML <a> elements.
-            try:
-                anchors = soup.find(id="search").find_all("a")
-            # Sometimes (depending on the User-Agent) there is no id "search" in html response.
-            except AttributeError:
-                # Remove links from the top bar.
-                gbar = soup.find(id="gbar")
-                if gbar:
-                    gbar.clear()
-                anchors = soup.find_all("a")
+            # Найти все <a> элементы внутри элемента с id="search"
+            anchors = []
+            search_node = tree.css_first("#search")
+            if search_node:
+                anchors = search_node.css("a")
+            else:
+                # Иногда (в зависимости от User-Agent) нет id "search" в html ответе.
+                # Удаляем ссылки из верхней панели.
+                # В selectolax нет метода decompose(), поэтому просто игнорируем эти ссылки.
+                anchors = tree.css("a")
 
             # Tracks number of valid URLs found on a search page.
             valid_links_found_in_this_search = 0
@@ -458,9 +452,9 @@ class SearchClient:
             for a in anchors:
                 # Get the URL from the anchor tag.
                 try:
-                    link = a["href"]
+                    link = a.attributes.get("href", "")
                 except KeyError:
-                    self.logger.warning(f"No href for link: {link}")
+                    self.logger.warning(f"No href for link: {a.text(separator=' ', strip=True)}")
                     continue
 
                 # Filter invalid links and links pointing to Google itself.
@@ -471,18 +465,29 @@ class SearchClient:
                 if self.verbose_output:
                     # Extract the URL title.
                     try:
-                        title = a.get_text()
+                        title = a.text(separator=" ", strip=True)
                     except Exception:
                         self.logger.warning(f"No title for link: {link}")
                         title = ""
 
-                    # Extract the URL description.
-                    try:
-                        description = a.parent.parent.contents[1].get_text()
+                    if not title:
+                        continue
 
-                        # Sometimes Google returns different structures.
-                        if description == "":
-                            description = a.parent.parent.contents[2].get_text()
+                    # Извлечение описания должно соответствовать оригинальной логике:
+                    # description = a.parent.parent.contents[1].get_text()
+                    # Если описание пустое, попытаться получить из contents[2]
+
+                    description = ""
+                    try:
+                        parent = a.parent
+                        if parent:
+                            grandparent = parent.parent.parent.parent.parent
+                            if grandparent:
+                                # Используем CSS-селекторы для поиска div с data-sncf="1" или "1,2"
+                                description_node = grandparent.css_first('div[data-sncf="1"], div[data-sncf="1,2"]')
+                                if description_node:
+                                    description = description_node.text(separator=" ", strip=True)
+
 
                     except Exception:
                         self.logger.warning(f"No description for link: {link}")
